@@ -250,3 +250,25 @@ func TestRedisBridge_CloseExitsCleanly(t *testing.T) {
 	after := runtime.NumGoroutine()
 	assert.LessOrEqual(t, after, before+2, "RedisBridge should exit cleanly without leaking goroutines")
 }
+
+
+func TestClient_ConcurrentCloseAndPing(t *testing.T) {
+	hub := NewHub()
+	client := NewClient(hub, nil, "user-race-1")
+	hub.Register(client)
+	defer hub.Unregister(client)
+
+	done := make(chan struct{})
+	for i := 0; i < 4; i++ {
+		go func() {
+			client.missedPings.Add(1)
+			_ = client.MissedPings()
+			client.ResetMissedPings()
+			client.Close()
+			done <- struct{}{}
+		}()
+	}
+	for i := 0; i < 4; i++ {
+		<-done
+	}
+}
